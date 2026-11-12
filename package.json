@@ -10,7 +10,7 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@fajekrina/sdui": "github:fajekrina/sdui#sdui-0.3.0",
+    "@fajekrina/sdui": "git+https://github.com/fajekrina/sdui.git#sdui-0.3.0",
     "bootstrap": "^5.3.3",
     "vue": "^3.4.0",
     "vue-router": "^4.3.0"
