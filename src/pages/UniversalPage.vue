@@ -1,19 +1,19 @@
 <script setup lang="ts">
 /**
- * UniversalPage — GENERIC page built purely from JSON demo
- * Hits API GET /api/universal/client/page/{mid}/{key} only via service-repo composable
+ * UniversalPage — GENERIC page built purely from JSON
+ * Loads GET /api/universal/client/page/{mid}/{key} via service-repo composable (ETag + last-good cache).
+ * Navigation actions go through the SDUI NavigationPort wired to vue-router.
  */
-import { watch } from 'vue'
+import { computed, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import Fajrina from '@fajekrina/sdui/vue'
+import type { FajrinaActionEvent, SduiPorts } from '@fajekrina/sdui'
 import { useUniversalPage } from '../composables/useUniversalPage'
 import { resolveTarget } from '../utils/route'
 
-type FajrinaEvent = { behavior?: string; action?: string; target?: string; data?: Record<string, unknown>; params?: Record<string, unknown> }
-
 const route = useRoute()
 const router = useRouter()
-const { data, error, loadPage, submitAction } = useUniversalPage()
+const { data, error, source, loadPage, submitAction } = useUniversalPage()
 
 function currentMid(): string {
   const pm = route.params.merchantId as string | undefined
@@ -38,35 +38,35 @@ watch(
   { immediate: true }
 )
 
-async function handleAction(ev: Record<string, unknown>) {
-  const beh = (ev as FajrinaEvent).behavior
-  const tgt = (ev as FajrinaEvent).target
-  const act = (ev as FajrinaEvent).action
-  const mid = currentMid()
-  if (beh === 'navigate' && tgt) {
-    router.push(`/${mid}/${tgt}`)
-    return
+// SDUI never guesses URLs: the app's router is the NavigationPort
+const ports = computed<SduiPorts>(() => ({
+  navigation: {
+    navigate: (target, params) => {
+      const query: Record<string, string> = {}
+      for (const [k, v] of Object.entries(params ?? {})) if (v != null) query[k] = String(v)
+      router.push({ path: `/${currentMid()}/${target}`, query })
+    },
+    back: () => router.back(),
+    openExternal: (href) => { window.open(href, '_blank', 'noopener') }
   }
-  if (beh || act) {
-    try {
-      const json = await submitAction(beh ?? act ?? '', (ev as FajrinaEvent).data, (ev as FajrinaEvent).params ?? { target: tgt ?? 'home' })
-      const ok = Boolean((json as Record<string, unknown>).success)
-      if (ok && ((json as Record<string, unknown>).navigateTo || (json as Record<string, unknown>).target)) {
-        const t = String(((json as Record<string, unknown>).navigateTo ?? (json as Record<string, unknown>).target) as string)
-        router.push(`/${mid}/${t}`)
-      }
-    } catch (e) {
-      console.error(e)
-    }
+}))
+
+async function handleAction(ev: FajrinaActionEvent) {
+  // navigate/back/toast/modal/externalLink are handled by the library (ports + UI store);
+  // field errors are rendered by the library — only `submit` needs the backend.
+  if (ev.behavior === 'blocked') { console.warn('[sdui] blocked action', ev.data); return }
+  if (ev.behavior !== 'submit') return
+  try {
+    const json = await submitAction('submit', ev.data, ev.params ?? { target: ev.target ?? 'home' })
+    if (json.success && (json.navigateTo || json.target)) router.push(`/${currentMid()}/${String(json.navigateTo ?? json.target)}`)
+  } catch (e) {
+    console.error(e)
   }
 }
 </script>
 
 <template>
-<!--  <div style="min-height:100vh; background:#ffffff; color:#0f172a;">-->
-<!--    <div class="container" style="max-width:1100px; padding:24px;">-->
-      <div v-if="error" class="alert alert-danger py-2 small">{{ error }}</div>
-      <Fajrina :data="data as unknown as never" @action="handleAction" />
-<!--    </div>-->
-<!--  </div>-->
+  <div v-if="error" class="alert alert-danger py-2 small m-3">{{ error }}</div>
+  <div v-if="source === 'cache'" class="alert alert-warning py-2 small m-3">Offline — menampilkan versi tersimpan terakhir.</div>
+  <Fajrina :data="data as never" :ports="ports" @action="handleAction" />
 </template>

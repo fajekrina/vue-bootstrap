@@ -10,7 +10,9 @@ const data = ref<unknown>(null)
 const status = ref('')
 const pages = ref<string[]>([])
 const registry = ref<Record<string, {props?: Record<string, unknown>}>|undefined>(undefined)
-fetch('/universal/components.json').then(r=>r.ok?r.json():null).then(j=>{ if(j?.components) registry.value=j.components; else if(j) registry.value=j as never }).catch(()=>{})
+// palette = backend registry (sdui_component_type); without it the builder falls back to the core registry
+const lockVersion = ref<number | undefined>(undefined)
+universalMerchantRepository.componentTypes().then(j => { registry.value = j.components }).catch(() => { registry.value = undefined })
 
 async function loadPages(mid: string) {
   try {
@@ -32,7 +34,7 @@ watch([merchantId, pageKey], async ([mid, key]) => {
     data.value = { layout: { components: [] } } as unknown
     return
   }
-  try { data.value = await universalMerchantRepository.getDraft(mid, key) } catch {}
+  try { const d = await universalMerchantRepository.getDraft(mid, key); data.value = d; lockVersion.value = d.lockVersion } catch {}
 })
 
 async function handleNew() {
@@ -72,13 +74,18 @@ async function onSave(payload: { components: UniversalComponent[] }) {
     } catch {}
   }
   try {
-    await universalMerchantRepository.save(merchantId.value, key, payload.components as unknown[])
+    const res = await universalMerchantRepository.save(merchantId.value, key, payload.components as never, isNew ? undefined : lockVersion.value) as { tree?: string; unchanged?: string[]; page?: { lockVersion?: number } }
     pageKey.value = key
     data.value = { layout: { components: payload.components } } as unknown
-    status.value = 'Saved ✔ ' + key
+    lockVersion.value = res.page?.lockVersion
+    status.value = `Saved ✔ ${res.tree ?? key}${res.unchanged?.length === 2 ? ' (tidak ada perubahan)' : ''}`
     setTimeout(() => (status.value = ''), 3000)
     loadPages(merchantId.value)
-  } catch (e) { status.value = 'Save failed: ' + String((e as Error).message); setTimeout(()=>status.value='',3000) }
+  } catch (e) {
+    const err = e as Error & { status?: number }
+    status.value = err.status === 409 ? 'Save failed: draft diubah di tempat lain — pilih ulang page untuk memuat versi terbaru' : 'Save failed: ' + String(err.message)
+    setTimeout(()=>status.value='',5000)
+  }
 }
 
 async function onPublish(payload: { components: UniversalComponent[] }) {
@@ -89,11 +96,11 @@ async function onPublish(payload: { components: UniversalComponent[] }) {
     if (!existing) { status.value=`Publish gagal: pageKey "${key}" belum ada — Save dulu`; setTimeout(()=>status.value='',3000); return }
   } catch {}
   try {
-    await universalMerchantRepository.publish(merchantId.value, key)
-    status.value = 'Published ✔ ' + key
+    const res = await universalMerchantRepository.publish(merchantId.value, key)
+    status.value = `Published ✔ ${res.releaseId}`
     setTimeout(() => (status.value = ''), 3000)
   } catch (e) { status.value = 'Publish failed: ' + String((e as Error).message); setTimeout(()=>status.value='',3000) }
-  try { data.value = await universalMerchantRepository.getDraft(merchantId.value, key) } catch {}
+  try { const d = await universalMerchantRepository.getDraft(merchantId.value, key); data.value = d; lockVersion.value = d.lockVersion } catch {}
 }
 </script>
 

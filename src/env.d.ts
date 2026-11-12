@@ -4,5 +4,3 @@ declare module '*.vue' {
   const component: DefineComponent<object, object, unknown>
   export default component
 }
-declare module '@fajekrina/sdui/vue'
-declare module '@fajekrina/sdui'
