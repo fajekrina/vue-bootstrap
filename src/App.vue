@@ -1,6 +1,6 @@
 <script setup lang="ts">
 /**
- * App — router-view only (pages handle API via composable + service-repo)
+ * App — router-view only (pages own the SDUI engine and builder)
  */
 </script>
 
