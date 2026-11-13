@@ -104,7 +104,7 @@ npm run dev                          # http://localhost:5174/merchant_demo/home
 - Halaman riwayat release + rollback di admin.
 - E2E (Playwright) untuk alur home → seat-selection → checkout.
 
-## Spec screens demo (branch `feat/spec-screens-demo`)
+## Spec screens demo (branch `feat/versioned-screens`)
 Aplikasi ini memakai engine `@fajekrina/sdui` (paket lokal, branch `feat/builder-adopt-0.3`) — versi sdui 0.3.x
 ada di branch `sdui-0.3.x`.
 
